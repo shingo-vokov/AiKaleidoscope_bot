@@ -26,7 +26,7 @@ bot.api.setMyCommands([
 
 // ID вашей группы
 const ALLOWED_GROUP_ID = -1002022226776; // Замените на ваш реальный ID группы
-const CHECK_MEMBERSHIP = true; // проверка членства в группе 
+const CHECK_MEMBERSHIP = false; // проверка членства в группе 
 
 // Путь к файлу для хранения контекста
 const CONTEXT_FILE_PATH = path.join(__dirname, 'context.json');
