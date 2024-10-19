@@ -643,19 +643,21 @@ bot.callbackQuery('confirm_clear_memories', async (ctx) => {
             return;
         }
 
-        // Очищаем историю и воспоминания
-        globalContext[userId].history = [];
-        globalContext[userId].memories = {};
-        globalContext[userId].messageCountSinceSummary = 0;
+        // Очищаем историю, воспоминания и суммаризации
+        if (globalContext[userId]) {
+            globalContext[userId].history = [];
+            globalContext[userId].memories = {};
+            globalContext[userId].messageCountSinceSummary = 0;
+        }
         await saveContext(globalContext);
 
-        await ctx.answerCallbackQuery({ text: 'Ваши воспоминания очищены.' });
+        await ctx.answerCallbackQuery({ text: 'Ваши воспоминания и суммаризации очищены.' });
         await sendLongMessage(
             ctx,
-            'Я очистила все воспоминания о нашем общении. Мы можем начать заново!'
+            'Я очистила все воспоминания и суммаризации нашего общения. Мы можем начать заново!'
         );
     } catch (error) {
-        console.error('Ошибка при очистке воспоминаний:', error);
+        console.error('Ошибка при очистке воспоминаний и суммаризаций:', error);
         await ctx.answerCallbackQuery({
             text: 'Произошла ошибка. Пожалуйста, попробуйте позже.',
         });
