@@ -1,0 +1,32 @@
+{
+  "name": "js_hermione",
+  "version": "1.0.0",
+  "description": "Telegram бот Гермиона на основе Gemini AI",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon --ignore context.json index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "gemini",
+    "ai"
+  ],
+  "author": "Ваше имя",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@grammyjs/runner": "^2.0.3",
+    "bottleneck": "^2.19.5",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "node-fetch": "^3.3.2",
+    "p-retry": "^6.2.0",
+    "sanitize-html": "^2.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7"
+  }
+}
