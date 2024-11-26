@@ -28,6 +28,15 @@ bot.api.setMyCommands([
 const ALLOWED_GROUPS = [-1002022226776, -1002047093027]; // Добавьте ID обеих разрешенных групп
 const CHECK_MEMBERSHIP = false; // проверка членства в группе 
 
+/**
+ * Функция для проверки, является ли группа разрешенной
+ * @param {number} chatId - ID чата/группы
+ * @returns {boolean} - true если группа разрешена, false если нет
+ */
+function isAllowedGroup(chatId) {
+    return ALLOWED_GROUPS.includes(chatId);
+}
+
 // Путь к файлу для хранения контекста
 const CONTEXT_FILE_PATH = path.join(__dirname, 'context.json');
 
