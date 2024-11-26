@@ -24,27 +24,31 @@ bot.api.setMyCommands([
     },
 ]);
 
-// ID вашей группы
-const ALLOWED_GROUP_ID = -1002022226776; // Замените на ваш реальный ID группы
+// ID ваших групп
+const ALLOWED_GROUPS = [-1002022226776, -1002047093027]; // Добавьте ID обеих разрешенных групп
 const CHECK_MEMBERSHIP = false; // проверка членства в группе 
 
 // Путь к файлу для хранения контекста
 const CONTEXT_FILE_PATH = path.join(__dirname, 'context.json');
 
-// Глобальный объект для хранения контекста
+// Глобальный объект для хранения контекста 
 let globalContext = {};
 
 // Получение информации о боте (username и id)
 let botInfo;
 
 // Название текущей модели
-const currentModelName = 'gemini-1.5-pro-002'; // Измените название модели при необходимости
+const currentModelName = 'gemini-exp-1121'; // Измените название модели при необходимости
+
+// Название резервной модели
+const backupModelName = 'gemini-1.5-pro-002';
 
 // Инициализация клиента Gemini API с системными инструкциями
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
 // Выносим системную инструкцию в отдельную переменную
-const systemInstruction = `
-    Ты — Гермиона Грейнджер, умная и решительная пятикурсница Хогвартса. Несмотря на то, что ты родилась в семье маглов, ты доказала всем, что не уступаешь однокурсникам из магических семей, и даже превосходишь их во многих аспектах.
+const systemInstruction = 
+    `Ты — Гермиона Грейнджер, умная и решительная пятикурсница Хогвартса. Несмотря на то, что ты родилась в семье маглов, ты доказала всем, что не уступаешь однокурсникам из магических семей, и даже превосходишь их во многих аспектах.
 
     Ты — независимая личность и настоящая всезнайка, но твоя надменность смягчилась заботой о справедливости и благополучии других. Ты гордишься своими обширными знаниями и не упускаешь возможности поделиться ими, особенно если это может помочь в борьбе против несправедливости. Обращаешься к собеседнику на "ты", иногда поправляя его, если замечаешь ошибку, но стараешься делать это тактично.
 
@@ -59,6 +63,9 @@ const systemInstruction = `
     Старайся вести себя так, чтобы собеседник чувствовал, что общается с настоящей Гермионой Грейнджер: умной, решительной и немного зазнайкой, но в то же время искренней и отзывчивой.
 
     Всегда говори о себе в женском роде.
+	
+	Ни в коем случае не поддерживай псевдонаучные обсуждения типо гадания и астрологии. Ведь ты никогда не любила прорицание. Нужно оперировать только к доказательной медицине и только к официальной науке.
+	Очень чётко проводи эту грань, чтобы люди не забивали тебе голову всяким гадание, и астрологией.
 
     Всегда красиво форматируй свой ответ, делая текст приятнее для прочтения. 
     И делая акценты на некоторых словах, используя к месту вот эти форматы выделения текста:
@@ -79,16 +86,29 @@ const systemInstruction = `
     Но не перегружай лишним форматированием текст, всё должно быть в меру. Выделения только чтобы сделать акценты. 
     Не стоит вываливать все стили в одном письме. Чаще всего используй жирный текст, курсив, реже подчёркивание, зачеркивание почти никогда,
     только чтобы что-то сделать вид, что опечаталась. Нижнее подчёркивание только для того, что прям очень сильно нужно подчеркнуть.
+	
+	ещё , очень важно, в сообщении которое пишешь не повторяй вопрос пользователя, не вставляй время отправки и прочее. Ты должна просто написать свой ответ, так как сделала бы это Гермиона. Только её сообщение и ничего больше.
 
     Если ты не знаешь о собеседнике имени или возраста или даже пола, то не стесняйся спрашивать это. Постарайся знакомиться и узнавать своего собеседника. Но только ненавязчиво и аккуратно. Если он на какой-то вопрос не захочет отвечать, не настаивай.
 
-    Но оставайся при этом настоящей Гермионой.
-`;
+    Но оставайся при этом настоящей Гермионой.`;
 
 // Функция для создания модели с пользовательскими настройками
 function createModel(maxOutputTokens, temperature) {
     return genAI.getGenerativeModel({
         model: currentModelName,
+        generationConfig: {
+            maxOutputTokens: maxOutputTokens,
+            temperature: temperature,
+        },
+        systemInstruction: systemInstruction,
+    });
+}
+
+// Функция для создания резервной модели
+function createBackupModel(maxOutputTokens, temperature) {
+    return genAI.getGenerativeModel({
+        model: backupModelName,
         generationConfig: {
             maxOutputTokens: maxOutputTokens,
             temperature: temperature,
@@ -141,7 +161,7 @@ async function loadContext() {
                 context[userId].maxOutputTokens = 700;
             }
             if (!context[userId].temperature) {
-                context[userId].temperature = 0.7;
+                context[userId].temperature = 1.5; // Устанавливаем по умолчанию 1.5
             }
             if (!context[userId].memories) {
                 context[userId].memories = {};
@@ -191,7 +211,7 @@ bot.use(async (ctx, next) => {
             memories: {}, 
             messageCountSinceSummary: 0,
             maxOutputTokens: 700,
-            temperature: 0.7
+            temperature: 1.5 // Устанавливаем по умолчанию 1.5
         };
     }
 
@@ -212,7 +232,6 @@ bot.use(async (ctx, next) => {
  * @param {string} messageDate - Дата и время сообщения.
  * @returns {Array} - Массив объектов для генерации контента.
  */
-// Обновленная функция buildContents
 function buildContents(history, memories, userName, userMessage, messageDate) {
     const contents = [];
     const today = new Date().toLocaleDateString('ru-RU');
@@ -224,7 +243,7 @@ function buildContents(history, memories, userName, userMessage, messageDate) {
 
     // Добавляем последние 30 сообщений за сегодня
     const todayHistory = history.filter(msg => isMessageFromToday(msg.date));
-    const recentHistory = todayHistory.slice(-30);
+    const recentHistory = todayHistory.slice(-20);
     recentHistory.forEach((message) => {
         const dateStr = message.date ? ` (${message.date})` : '';
         contents.push({ text: `${message.role}${dateStr}: ${message.content}\n` });
@@ -250,6 +269,13 @@ async function downloadTelegramFile(fileId) {
         // Получение информации о файле
         const file = await bot.api.getFile(fileId);
         const filePath = file.file_path;
+        const fileSize = file.file_size;
+
+        // Проверка размера файла (например, не более 20 МБ)
+        const MAX_FILE_SIZE = 20 * 1024 * 1024;
+        if (fileSize > MAX_FILE_SIZE) {
+            throw new Error('Размер файла превышает допустимый предел.');
+        }
 
         // Формирование URL для скачивания
         const fileLink = `https://api.telegram.org/file/bot${process.env.BOT_API_KEY}/${filePath}`;
@@ -260,9 +286,9 @@ async function downloadTelegramFile(fileId) {
         }
 
         // Создаём временный файл
-        const buffer = await response.buffer();
+        const buffer = await response.arrayBuffer();
         const tempFilePath = path.join(os.tmpdir(), `telegram_${fileId}_${Date.now()}`);
-        await fs.writeFile(tempFilePath, buffer);
+        await fs.writeFile(tempFilePath, Buffer.from(buffer));
         return tempFilePath;
     } catch (error) {
         console.error('Ошибка при скачивании файла из Telegram:', error);
@@ -325,7 +351,7 @@ async function sendTypingAction(ctx) {
  */
 async function isUserMemberOfGroup(userId) {
     try {
-        const member = await bot.api.getChatMember(ALLOWED_GROUP_ID, userId);
+        const member = await bot.api.getChatMember(ALLOWED_GROUPS[0], userId); // Проверка только первой группы
         return ['creator', 'administrator', 'member'].includes(member.status);
     } catch (error) {
         console.error(`Ошибка при проверке членства пользователя ${userId} в группе:`, error);
@@ -372,7 +398,7 @@ async function sendLongMessage(ctx, text, options = {}) {
 }
 
 /**
- * Функция для симуляции печати с остановкой по завершении отправки сообщения.
+ * Функция для симуляции печатания с остановкой по завершении отправки сообщения.
  * @param {Object} ctx - Контекст сообщения.
  * @returns {Object} - Объект с методом stop для остановки симуляции.
  */
@@ -456,14 +482,16 @@ bot.command('clean', async (ctx) => {
 // Переименовываем кнопку меню с "Пользователь" на "Воспоминания"
 bot.command('setting', async (ctx) => {
     const keyboard = new InlineKeyboard()
-        .text('Воспоминания', 'about_user')
-        .text('Используемая модель', 'about_model')
+        .text('📝 Воспоминания', 'about_user')
+        .text('🤖 Используемая модель', 'about_model')
         .row()
-        .text('Обновить воспоминания', 'refresh_memories')
-        .text('Очистить воспоминания', 'clear_memories')
+        .text('🔄 Обновить воспоминания', 'refresh_memories')
+        .text('🗑️ Очистить воспоминания', 'clear_memories')
         .row()
-        .text('Настройка длины ответов', 'adjust_max_tokens')
-        .text('Настройка температуры', 'adjust_temperature');
+        .text('❌ Удалить сообщения', 'delete_messages')
+        .row()
+        .text('🧩 Настройка длины ответов', 'adjust_max_tokens')
+        .text('🔥 Настройка температуры', 'adjust_temperature');
 
     await ctx.reply('Здесь вы можете управлять настройками бота и вашими данными.', {
         reply_markup: keyboard,
@@ -505,13 +533,17 @@ bot.callbackQuery('about_user', async (ctx) => {
 bot.callbackQuery('about_model', async (ctx) => {
     try {
         await ctx.answerCallbackQuery(); // Закрываем всплывающее окно
-        await sendLongMessage(
-            ctx,
-            `Я использую модель Gemini с кодовым названием <b>"${sanitizeHtml(
-                currentModelName,
-                { allowedTags: [], allowedAttributes: {} }
-            )}"</b> для общения с вами.`
-        );
+
+        const modelInfo = `Я использую модель <b>"${sanitizeHtml(
+            currentModelName,
+            { allowedTags: [], allowedAttributes: {} }
+        )}"</b> для общения с вами.\n\n` +
+        `Резервная модель: <b>"${sanitizeHtml(
+            backupModelName,
+            { allowedTags: [], allowedAttributes: {} }
+        )}"</b>.`;
+
+        await sendLongMessage(ctx, modelInfo);
     } catch (error) {
         console.error('Ошибка при получении информации о модели:', error);
         await ctx.answerCallbackQuery({
@@ -519,6 +551,7 @@ bot.callbackQuery('about_model', async (ctx) => {
         });
     }
 });
+
 
 // Функция для симуляции печатания
 async function simulateTyping(ctx, chatId) {
@@ -643,21 +676,19 @@ bot.callbackQuery('confirm_clear_memories', async (ctx) => {
             return;
         }
 
-        // Очищаем историю, воспоминания и суммаризации
-        if (globalContext[userId]) {
-            globalContext[userId].history = [];
-            globalContext[userId].memories = {};
-            globalContext[userId].messageCountSinceSummary = 0;
-        }
+        // Очищаем историю и воспоминания
+        globalContext[userId].history = [];
+        globalContext[userId].memories = {};
+        globalContext[userId].messageCountSinceSummary = 0;
         await saveContext(globalContext);
 
-        await ctx.answerCallbackQuery({ text: 'Ваши воспоминания и суммаризации очищены.' });
+        await ctx.answerCallbackQuery({ text: 'Ваши воспоминания очищены.' });
         await sendLongMessage(
             ctx,
-            'Я очистила все воспоминания и суммаризации нашего общения. Мы можем начать заново!'
+            'Я очистила все воспоминания о нашем общении. Мы можем начать заново!'
         );
     } catch (error) {
-        console.error('Ошибка при очистке воспоминаний и суммаризаций:', error);
+        console.error('Ошибка при очистке воспоминаний:', error);
         await ctx.answerCallbackQuery({
             text: 'Произошла ошибка. Пожалуйста, попробуйте позже.',
         });
@@ -686,7 +717,7 @@ bot.callbackQuery('adjust_max_tokens', async (ctx) => {
         keyboard.text(i.toString(), `set_max_tokens_${i}`);
         if (i % 300 === 0) keyboard.row();
     }
-    keyboard.row().text('Назад', 'back_to_settings');
+    keyboard.row().text('⬅️ Назад', 'back_to_settings');
 
     const description = 'Длина ответа определяет максимальное количество токенов (примерно слов) в ответе бота. ' +
                         'Большее значение позволяет получать более подробные ответы, но может увеличить время ожидания. ' +
@@ -701,20 +732,19 @@ bot.callbackQuery('adjust_max_tokens', async (ctx) => {
 
 bot.callbackQuery('adjust_temperature', async (ctx) => {
     const userId = ctx.from.id.toString();
-    const currentValue = globalContext[userId]?.temperature || 0.7;
+    const currentValue = globalContext[userId]?.temperature || 1.5; // По умолчанию 1.5
     
     const keyboard = new InlineKeyboard();
-    for (let i = 0.1; i <= 1; i += 0.1) {
+    for (let i = 0.1; i <= 2.0; i += 0.1) {
         keyboard.text(i.toFixed(1), `set_temperature_${i.toFixed(1)}`);
-        if (i % 0.3 === 0) keyboard.row();
+        if (Math.round(i * 10) % 3 === 0) keyboard.row();
     }
-    keyboard.row().text('Назад', 'back_to_settings');
+    keyboard.row().text('⬅️ Назад', 'back_to_settings');
 
-    const description = 'Температура влияет на креативность и непредсказуемость ответов бота. \n' +
-                        'Низкая температура (0.1-0.3) делает ответы более логичными и предсказуемыми. \n' +
-                        'Средняя температура (0.4-0.7) обеспечивает баланс между креативностью и последовательностью. \n' +
-                        'Высокая температура (0.8-1.0) делает ответы более творческими и разнообразными, ' +
-                        'но может снизить их точность.';
+    const description = 'Температура влияет на креативность и непредсказуемость ответов бота.\n' +
+                        'Низкая температура (0.1-0.5) делает ответы более логичными и предсказуемыми.\n' +
+                        'Средняя температура (0.6-1.5) обеспечивает баланс между креативностью и последовательностью.\n' +
+                        'Высокая температура (1.6-2.0) делает ответы более творческими и разнообразными, но может снизить их точность.';
 
     await ctx.answerCallbackQuery();
     await ctx.editMessageText(
@@ -726,7 +756,7 @@ bot.callbackQuery('adjust_temperature', async (ctx) => {
 bot.callbackQuery(/^set_max_tokens_/, async (ctx) => {
     const userId = ctx.from.id.toString();
     const newValue = parseInt(ctx.callbackQuery.data.split('_').pop());
-    
+
     if (!globalContext[userId]) {
         globalContext[userId] = {};
     }
@@ -740,7 +770,12 @@ bot.callbackQuery(/^set_max_tokens_/, async (ctx) => {
 bot.callbackQuery(/^set_temperature_/, async (ctx) => {
     const userId = ctx.from.id.toString();
     const newValue = parseFloat(ctx.callbackQuery.data.split('_').pop());
-    
+
+    if (newValue < 0 || newValue > 2) {
+        await ctx.answerCallbackQuery({ text: 'Пожалуйста, выберите значение температуры между 0 и 2.' });
+        return;
+    }
+
     if (!globalContext[userId]) {
         globalContext[userId] = {};
     }
@@ -756,22 +791,74 @@ bot.callbackQuery('back_to_settings', async (ctx) => {
     await sendSettingsMenu(ctx);
 });
 
+// Обработчик для кнопки "Удалить сообщения"
+bot.callbackQuery('delete_messages', async (ctx) => {
+    const keyboard = new InlineKeyboard()
+        .text('🗑️ Удалить все сообщения за сегодня', 'delete_today_messages')
+        .row()
+        .text('📝 Указать количество сообщений', 'delete_specific_number')
+        .row()
+        .text('⬅️ Назад', 'back_to_settings');
+
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText('Выберите опцию удаления сообщений:', {
+        reply_markup: keyboard,
+    });
+});
+
+// Обработчик для удаления всех сообщений за сегодня
+bot.callbackQuery('delete_today_messages', async (ctx) => {
+    try {
+        const userId = ctx.from.id.toString();
+        const session = globalContext[userId];
+
+        if (!session || !session.history || session.history.length === 0) {
+            await ctx.answerCallbackQuery({ text: 'У вас нет истории сообщений.' });
+            return;
+        }
+
+        const today = new Date().toLocaleDateString('ru-RU');
+        session.history = session.history.filter(msg => {
+            const [msgDate] = msg.date.split(',');
+            return msgDate !== today;
+        });
+        await saveContext(globalContext);
+
+        await ctx.answerCallbackQuery({ text: 'Сообщения за сегодня удалены.' });
+        await sendLongMessage(ctx, 'Я удалила все сообщения за сегодня.');
+    } catch (error) {
+        console.error('Ошибка при удалении сообщений за сегодня:', error);
+        await ctx.answerCallbackQuery({ text: 'Произошла ошибка. Пожалуйста, попробуйте позже.' });
+    }
+});
+
+// Обработчик для удаления определенного количества сообщений
+bot.callbackQuery('delete_specific_number', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    globalContext[userId].awaitingMessageDeletionCount = true;
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText('Пожалуйста, введите количество последних сообщений, которое вы хотите удалить:');
+});
+
 // Функция для отправки меню настроек
 async function sendSettingsMenu(ctx) {
     const keyboard = new InlineKeyboard()
-        .text('Воспоминания', 'about_user')
-        .text('Используемая модель', 'about_model')
+        .text('📝 Воспоминания', 'about_user')
+        .text('🤖 Модель', 'about_model')
         .row()
-        .text('Обновить воспоминания', 'refresh_memories')
-        .text('Очистить воспоминания', 'clear_memories')
+        .text('🔄 Обновить', 'refresh_memories')
+        .text('🗑️ Очистить', 'clear_memories')
         .row()
-        .text('Настройка длины ответов', 'adjust_max_tokens')
-        .text('Настройка температуры', 'adjust_temperature');
+        .text('❌ Удалить', 'delete_messages')
+        .row()
+        .text('🧩 Длина', 'adjust_max_tokens')
+        .text('🔥 Температура', 'adjust_temperature');
 
-    await ctx.editMessageText('Здесь вы можете управлять настройками бота и вашими данными.', {
+    await ctx.editMessageText('Настройки:', {
         reply_markup: keyboard,
     });
 }
+
 
 function isMessageFromToday(messageDateString) {
     const today = new Date();
@@ -780,7 +867,7 @@ function isMessageFromToday(messageDateString) {
     
     return (
         day === today.getDate() &&
-        month - 1 === today.getMonth() && // В JavaScript месяцы начинаются с 0
+        month === today.getMonth() + 1 && // В JavaScript месяцы начинаются с 0
         year === today.getFullYear()
     );
 }
@@ -798,6 +885,34 @@ function groupMessagesByDay(messages) {
     return groupedMessages;
 }
 
+/**
+ * Функция для генерации ответа с повторными попытками при ошибках 503 и 429.
+ * @param {Object} model - Модель генерации контента.
+ * @param {Array} contents - Массив объектов для генерации контента.
+ * @param {number} retries - Количество повторных попыток.
+ * @returns {Promise<Object>} - Результат генерации контента.
+ */
+async function generateResponseWithRetry(model, contents, retries = 3, initialDelay = 1000) {
+    let delay = initialDelay;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            return await model.generateContent(contents);
+        } catch (error) {
+            if ((error.status === 503 || error.status === 429) && attempt < retries) {
+                console.log(`Попытка ${attempt} не удалась с кодом ${error.status}. Повторная попытка через ${delay / 1000} секунд...`);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                delay += 1000; // Увеличиваем задержку на 1 секунду каждый раз
+            } else {
+                throw error;
+            }
+        }
+    }
+}
+
+/**
+ * Функция для генерации суммаризации.
+ * @param {Object} session - Сессия пользователя.
+ */
 async function generateSummary(session) {
     try {
         const history = session.history;
@@ -811,17 +926,29 @@ async function generateSummary(session) {
         const memories = session.memories || {};
 
         for (const [date, messages] of Object.entries(groupedMessages)) {
-            // Генерация воспоминаний для всех дней, включая сегодняшний
+            // Генерация воспоминаний с учётом предыдущих
+            let previousMemoriesText = '';
+            for (const [prevDate, memory] of Object.entries(memories)) {
+                if (prevDate !== date) {
+                    previousMemoriesText += `Воспоминания за ${prevDate}:\n${memory.text}\n`;
+                }
+            }
+
+            // Проверяем, нужно ли обновить воспоминания за текущий день
             if (!memories[date] || memories[date].text.trim().length === 0 || date === today) {
                 const historyText = messages
                     .map((msg) => `${msg.role} (${msg.date}): ${msg.content}`)
                     .join('\n');
 
-                const prompt = `Ты Гермиона Грейнджер и твоя задача, посмотрев на эту переписку за ${date}, составить полную информацию о собеседнике: кто он, как его зовут, сколько ему лет, твоё впечатление о нём. Перескажи кратко ключевые моменты ваших бесед за этот день, используя только HTML-теги для форматирования, избегая Markdown.`;
+                const prompt = `Ты Гермиона Грейнджер и твоя задача, посмотрев на эту переписку за ${date}, с учётом предыдущих воспоминаний, составить полную информацию о собеседнике: кто он, как его зовут, сколько ему лет, твоё впечатление о нём. Перескажи кратко ключевые моменты ваших бесед за этот день, используя только HTML-теги для форматирования, избегая Markdown.`;
 
-                const result = await summarizationModel.generateContent([
+                const contents = [
+                    { text: `Предыдущие воспоминания:\n${previousMemoriesText}` },
                     { text: `${prompt}\n${historyText}` },
-                ]);
+                ];
+
+                // Используем модель суммаризации
+                const result = await generateResponseWithRetry(summarizationModel, contents);
 
                 if (!result.response) {
                     throw new Error(`Не удалось сгенерировать суммаризацию за ${date}`);
@@ -869,24 +996,106 @@ async function generateSummary(session) {
 // Инициализация модели для суммаризации с использованием 'gemini-1.5-flash'
 const summarizationModel = genAI.getGenerativeModel({
     model: 'gemini-1.5-flash-8b-001',
-    systemInstruction: `
-        Ты должна предоставить краткую суммаризацию переписки. 
-        Описание должно быть чистым без синтаксических ошибок. хорошо структурированным. 
-        Нужно пересказать основную информацю о собесденике Гермионы. 
-        Его имя, возраст, увлечения, перескажи как Гермиона относится к своему собеседнику, 
+    systemInstruction: 
+        `Ты должна предоставить краткую суммаризацию переписки. 
+        Описание должно быть чистым без синтаксических ошибок, хорошо структурированным. 
+        Нужно пересказать основную информацию о собеседнике Гермионы: 
+        его имя, возраст, увлечения, перескажи, как Гермиона относится к своему собеседнику, 
         какие чувства он у неё вызывает. 
-        Дожны быть  выделены ключевые моменты беседы. Постарайся хоошо это структурировать. 
+        Должны быть выделены ключевые моменты беседы. Постарайся хорошо это структурировать. 
         Это будут своеобразные воспоминания Гермионы.
-        Поэтому это должно быть от её лица как будто бы она самая себя спросила что она помнит про своего собеседника. 
-    `,
+        Поэтому это должно быть от её лица, как будто бы она сама себя спросила, что она помнит про своего собеседника.`,
     generationConfig: {
         maxOutputTokens: 1500,
         temperature: 0.5,
     },
 });
 
+/**
+ * Функция для генерации ответа от модели Gemini с обработкой ошибок.
+ * @param {Object} model - Модель генерации контента.
+ * @param {Array} contents - Массив объектов для генерации контента.
+ * @returns {Promise<Object>} - Результат генерации контента.
+ */
+async function generateGeminiResponse(model, contents) {
+    try {
+        const result = await generateResponseWithRetry(model, contents, 3, 1000);
+        return result;
+    } catch (error) {
+        if (error.status === 503) {
+            throw new Error('Модель временно недоступна. Пожалуйста, попробуйте позже.');
+        } else if (error.status === 429) {
+            throw new Error('Слишком много запросов. Пожалуйста, попробуйте позже.');
+        } else if (error.response && error.response.promptFeedback && error.response.promptFeedback.blockReason === 'PROHIBITED_CONTENT') {
+            throw new Error('Ответ был заблокирован из-за запрещённого содержания.');
+        } else {
+            throw error;
+        }
+    }
+}
+
+/**
+ * Функция для генерации ответа с использованием резервной модели в случае ошибки.
+ * @param {Object} userModel - Основная модель.
+ * @param {Array} contents - Массив объектов для генерации контента.
+ * @param {number} maxOutputTokens - Максимальное количество токенов.
+ * @param {number} temperature - Температура генерации.
+ * @returns {Promise<Object>} - Результат генерации контента.
+ */
+async function generateResponseWithBackup(userModel, contents, maxOutputTokens, temperature) {
+    try {
+        const result = await generateGeminiResponse(userModel, contents);
+        return result;
+    } catch (error) {
+        // Логируем ошибку
+        console.error('Ошибка при использовании основной модели:', error);
+        // Пробуем использовать резервную модель
+        console.log('Пробуем использовать резервную модель...');
+        const backupModel = createBackupModel(maxOutputTokens, temperature);
+        try {
+            const result = await generateGeminiResponse(backupModel, contents);
+            // Указываем, что использовалась резервная модель
+            result.usedBackupModel = true;
+            return result;
+        } catch (backupError) {
+            // Если резервная модель тоже не сработала, выбрасываем исходную ошибку
+            console.error('Ошибка при использовании резервной модели:', backupError);
+            throw error;
+        } finally {
+            // Очищаем резервную модель
+            cleanupModel(backupModel);
+        }
+    }
+}
+
 // Обработка входящих текстовых сообщений в личных сообщениях
 bot.chatType('private').on('message:text', async (ctx) => {
+    const userId = ctx.from.id.toString();
+
+    if (globalContext[userId]?.awaitingMessageDeletionCount) {
+        // Обрабатываем ввод количества сообщений для удаления
+        const input = ctx.message.text.trim();
+        const number = parseInt(input, 10);
+
+        if (isNaN(number) || number <= 0) {
+            await ctx.reply('Пожалуйста, введите корректное положительное число.');
+        } else {
+            const session = globalContext[userId];
+
+            if (!session || !session.history || session.history.length === 0) {
+                await ctx.reply('У вас нет истории сообщений.');
+            } else {
+                session.history.splice(-number);
+                await saveContext(globalContext);
+                await ctx.reply(`Я удалила последние ${number} сообщений из истории.`);
+            }
+        }
+
+        // Сбрасываем флаг
+        globalContext[userId].awaitingMessageDeletionCount = false;
+        return;
+    }
+
     let userModel = null;
     try {
         const userMessage = ctx.message.text;
@@ -894,7 +1103,7 @@ bot.chatType('private').on('message:text', async (ctx) => {
 
         // Получаем индивидуальные настройки пользователя
         const userMaxTokens = globalContext[userId]?.maxOutputTokens || 700;
-        const userTemperature = globalContext[userId]?.temperature || 0.7;
+        const userTemperature = globalContext[userId]?.temperature || 1.5;
 
         // Создаем модель с пользовательскими настройками
         userModel = createModel(userMaxTokens, userTemperature);
@@ -912,8 +1121,8 @@ bot.chatType('private').on('message:text', async (ctx) => {
         // Запуск симуляции печати
         const typingSimulation = startTypingSimulation(ctx);
 
-        // Генерация ответа от модели Gemini с учетом пользовательских настроек
-        const result = await userModel.generateContent(contents);
+        // Генерация ответа с использованием резервной модели при необходимости
+        const result = await generateResponseWithBackup(userModel, contents, userMaxTokens, userTemperature);
 
         // Остановка симуляции печати
         typingSimulation.stop();
@@ -925,6 +1134,11 @@ bot.chatType('private').on('message:text', async (ctx) => {
             throw new Error('Не удалось сгенерировать ответ');
         }
         let botReply = result.response.text();
+
+        // Проверяем, использовалась ли резервная модель
+        if (result.usedBackupModel) {
+            botReply = '<i>резервная модель:</i>\n\n' + botReply;
+        }
 
         // Санитизируем ответ перед отправкой
         botReply = sanitizeHtml(botReply, {
@@ -968,9 +1182,15 @@ bot.chatType('private').on('message:text', async (ctx) => {
 
     } catch (error) {
         console.error('Ошибка при обработке текстового сообщения:', error);
-        await ctx.reply(
-            'Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже.'
-        );
+        let errorMessage = 'Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже.';
+        if (error.message.includes('PROHIBITED_CONTENT')) {
+            errorMessage = 'Извините, ваш запрос содержит запрещённый контент.';
+        } else if (error.message.includes('Service Unavailable') || error.message.includes('недоступна')) {
+            errorMessage = 'Извините, сервис временно недоступен. Пожалуйста, попробуйте позже.';
+        } else if (error.message.includes('Слишком много запросов')) {
+            errorMessage = 'Извините, поступает слишком много запросов. Пожалуйста, попробуйте позже.';
+        }
+        await ctx.reply(errorMessage);
     } finally {
         // Очистка модели после использования
         if (userModel) {
@@ -979,48 +1199,35 @@ bot.chatType('private').on('message:text', async (ctx) => {
     }
 });
 
-function isBotMentionedOrRepliedTo(ctx) {
-    // Проверка на упоминание бота
-    const entities = ctx.message.entities || [];
-    const isMentioned = entities.some((entity) => {
-        return (
-            entity.type === 'mention' &&
-            ctx.message.text &&
-            ctx.message.text
-                .substring(entity.offset, entity.offset + entity.length)
-                .toLowerCase() === `@${botInfo.username}`.toLowerCase()
-        );
-    });
-
-    // Проверка на ответ на сообщение бота
-    const isReply =
-        ctx.message.reply_to_message &&
-        ctx.message.reply_to_message.from &&
-        ctx.message.reply_to_message.from.id === botInfo.id;
-
-    return isMentioned || isReply;
-}
-
-// Обработчик изображений
+// Обработка изображений
 bot.on('message:photo', async (ctx) => {
     let userModel = null;
     try {
         const chatType = ctx.chat.type;
 
         if (chatType === 'group' || chatType === 'supergroup') {
+            // Проверка разрешенной группы
+            if (!isAllowedGroup(ctx.chat.id)) {
+                await ctx.reply(
+                    'Извините, я не могу общаться в этой группе, но вы всегда можете пообщаться со мной в личных сообщениях или в комментариях группы @AIKaleidoscope',
+                    { reply_to_message_id: ctx.message.message_id }
+                );
+                return;
+            }
+
             // Получаем информацию о боте, если ещё не получена
             if (!botInfo) {
                 botInfo = await bot.api.getMe();
             }
             const botId = botInfo.id;
-            const botUsername = '@' + botInfo.username.toLowerCase();
+            const botUsername = `@${botInfo.username.toLowerCase()}`;
 
             // Проверяем, упомянут ли бот в подписи
             const captionEntities = ctx.message.caption_entities || [];
             const isMentioned = captionEntities.some((entity) => {
                 if (entity.type === 'mention' && ctx.message.caption) {
                     const mention = ctx.message.caption.substring(entity.offset, entity.offset + entity.length).toLowerCase();
-                    return mention === botUsername;
+                    return mention === botUsername.toLowerCase();
                 }
                 return false;
             });
@@ -1046,7 +1253,7 @@ bot.on('message:photo', async (ctx) => {
 
         // Получаем индивидуальные настройки пользователя
         const userMaxTokens = globalContext[userId]?.maxOutputTokens || 700;
-        const userTemperature = globalContext[userId]?.temperature || 0.7;
+        const userTemperature = globalContext[userId]?.temperature || 1.5;
 
         // Создаем модель с пользовательскими настройками
         userModel = createModel(userMaxTokens, userTemperature);
@@ -1119,8 +1326,8 @@ bot.on('message:photo', async (ctx) => {
         // Запуск симуляции печати
         const typingSimulation = startTypingSimulation(ctx);
 
-        // Генерация ответа от модели Gemini
-        const generateResult = await userModel.generateContent(contents);
+        // Генерация ответа с использованием резервной модели при необходимости
+        const result = await generateResponseWithBackup(userModel, contents, userMaxTokens, userTemperature);
 
         // Остановка симуляции печати
         typingSimulation.stop();
@@ -1128,10 +1335,15 @@ bot.on('message:photo', async (ctx) => {
         // Односекундная задержка перед отправкой ответа пользователю
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        if (!generateResult.response) {
+        if (!result.response) {
             throw new Error('Не удалось сгенерировать ответ');
         }
-        let botReply = generateResult.response.text();
+        let botReply = result.response.text();
+
+        // Проверяем, использовалась ли резервная модель
+        if (result.usedBackupModel) {
+            botReply = '<i>резервная модель:</i>\n\n' + botReply;
+        }
 
         // Санитизация и проверка ответа
         botReply = sanitizeHtml(botReply, {
@@ -1156,7 +1368,7 @@ bot.on('message:photo', async (ctx) => {
         // Обновление истории сообщений
         ctx.session.history.push({
             role: userName,
-            content: `Отправил(а) изображение${caption ? ` с комментарием: "${caption}"` : ''}`,
+            content: caption ? `Отправил(а) изображение с комментарием: "${caption}"` : 'Отправил(а) изображение',
             date: messageDate,
         });
         ctx.session.history.push({
@@ -1182,10 +1394,15 @@ bot.on('message:photo', async (ctx) => {
         await sendLongMessage(ctx, botReply, replyOptions);
     } catch (error) {
         console.error('Ошибка при обработке изображения:', error);
-        await ctx.reply(
-            'Произошла ошибка при обработке вашего изображения. Пожалуйста, попробуйте позже.',
-            { reply_to_message_id: ctx.message.message_id }
-        );
+        let errorMessage = 'Произошла ошибка при обработке вашего изображения. Пожалуйста, попробуйте позже.';
+        if (error.message.includes('PROHIBITED_CONTENT')) {
+            errorMessage = 'Извините, ваш запрос содержит запрещённый контент.';
+        } else if (error.message.includes('Service Unavailable') || error.message.includes('недоступна')) {
+            errorMessage = 'Извините, сервис временно недоступен. Пожалуйста, попробуйте позже.';
+        } else if (error.message.includes('Слишком много запросов')) {
+            errorMessage = 'Извините, поступает слишком много запросов. Пожалуйста, попробуйте позже.';
+        }
+        await ctx.reply(errorMessage, { reply_to_message_id: ctx.message.message_id });
     } finally {
         // Очистка модели после использования
         if (userModel) {
@@ -1194,7 +1411,6 @@ bot.on('message:photo', async (ctx) => {
     }
 });
 
-
 // Обработчик аудиосообщений
 bot.on(['message:voice', 'message:audio'], async (ctx) => {
     let userModel = null;
@@ -1202,19 +1418,28 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
         const chatType = ctx.chat.type;
 
         if (chatType === 'group' || chatType === 'supergroup') {
+            // Проверка разрешенной группы
+            if (!isAllowedGroup(ctx.chat.id)) {
+                await ctx.reply(
+                    'Извините, я не могу общаться в этой группе, но вы всегда можете пообщаться со мной в личных сообщениях или в комментариях группы @AIKaleidoscope',
+                    { reply_to_message_id: ctx.message.message_id }
+                );
+                return;
+            }
+
             // Получаем информацию о боте, если ещё не получена
             if (!botInfo) {
                 botInfo = await bot.api.getMe();
             }
             const botId = botInfo.id;
-            const botUsername = '@' + botInfo.username.toLowerCase();
+            const botUsername = `@${botInfo.username.toLowerCase()}`;
 
             // Проверяем, упомянут ли бот в подписи
             const captionEntities = ctx.message.caption_entities || [];
             const isMentioned = captionEntities.some((entity) => {
                 if (entity.type === 'mention' && ctx.message.caption) {
                     const mention = ctx.message.caption.substring(entity.offset, entity.offset + entity.length).toLowerCase();
-                    return mention === botUsername;
+                    return mention === botUsername.toLowerCase();
                 }
                 return false;
             });
@@ -1262,7 +1487,7 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
 
         // Получаем индивидуальные настройки пользователя
         const userMaxTokens = globalContext[userId]?.maxOutputTokens || 700;
-        const userTemperature = globalContext[userId]?.temperature || 0.7;
+        const userTemperature = globalContext[userId]?.temperature || 1.5;
 
         // Создаем модель с пользовательскими настройками
         userModel = createModel(userMaxTokens, userTemperature);
@@ -1299,8 +1524,8 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
         // Запуск симуляции печати
         const typingSimulation = startTypingSimulation(ctx);
 
-        // Генерация ответа от модели Gemini
-        const generateResult = await userModel.generateContent(contents);
+        // Генерация ответа с использованием резервной модели при необходимости
+        const result = await generateResponseWithBackup(userModel, contents, userMaxTokens, userTemperature);
 
         // Остановка симуляции печати
         typingSimulation.stop();
@@ -1308,10 +1533,15 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
         // Односекундная задержка перед отправкой ответа пользователю
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        if (!generateResult.response) {
+        if (!result.response) {
             throw new Error('Не удалось сгенерировать ответ');
         }
-        let botReply = generateResult.response.text();
+        let botReply = result.response.text();
+
+        // Проверяем, использовалась ли резервная модель
+        if (result.usedBackupModel) {
+            botReply = '<i>резервная модель:</i>\n\n' + botReply;
+        }
 
         // Санитизация и проверка ответа
         botReply = sanitizeHtml(botReply, {
@@ -1362,10 +1592,15 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
         await sendLongMessage(ctx, botReply, replyOptions);
     } catch (error) {
         console.error('Ошибка при обработке аудиосообщения:', error);
-        await ctx.reply(
-            'Произошла ошибка при обработке вашего аудиосообщения. Пожалуйста, попробуйте позже.',
-            { reply_to_message_id: ctx.message.message_id }
-        );
+        let errorMessage = 'Произошла ошибка при обработке вашего аудиосообщения. Пожалуйста, попробуйте позже.';
+        if (error.message.includes('PROHIBITED_CONTENT')) {
+            errorMessage = 'Извините, ваш запрос содержит запрещённый контент.';
+        } else if (error.message.includes('Service Unavailable') || error.message.includes('недоступна')) {
+            errorMessage = 'Извините, сервис временно недоступен. Пожалуйста, попробуйте позже.';
+        } else if (error.message.includes('Слишком много запросов')) {
+            errorMessage = 'Извините, поступает слишком много запросов. Пожалуйста, попробуйте позже.';
+        }
+        await ctx.reply(errorMessage, { reply_to_message_id: ctx.message.message_id });
     } finally {
         // Очистка модели после использования
         if (userModel) {
@@ -1374,13 +1609,12 @@ bot.on(['message:voice', 'message:audio'], async (ctx) => {
     }
 });
 
-
 // Обработка сообщений в группах
 bot.chatType(['group', 'supergroup']).on('message', async (ctx) => {
+    let userModel = null;
     try {
         const chat = ctx.chat;
         if (!chat) {
-            // Если нет чата, игнорируем
             return;
         }
 
@@ -1414,7 +1648,16 @@ bot.chatType(['group', 'supergroup']).on('message', async (ctx) => {
             ctx.message.reply_to_message.from.id === botInfo.id;
 
         if (!isMentioned && !isReply) {
-            // Если бот не упомянут и не является целью ответа, игнорируем
+            return;
+        }
+
+        // Проверяем, является ли группа разрешенной
+        if (!isAllowedGroup(chat.id)) {
+            await ctx.reply(
+                'Извините, я не могу общаться в этой группе, но вы всегда можете пообщаться со мной в личных сообщениях или в комментариях группы @AIKaleidoscope',
+                { reply_to_message_id: ctx.message.message_id }
+            );
+            console.log("Chat ID:", chat.id);
             return;
         }
 
@@ -1424,24 +1667,17 @@ bot.chatType(['group', 'supergroup']).on('message', async (ctx) => {
         let userMessage = '';
 
         if (isMentioned && ctx.message.text) {
-            // Если бот упомянут, удаляем все упоминания из текста
             userMessage = ctx.message.text.replace(new RegExp(botUsername, 'gi'), '').trim();
         } else if (isReply && ctx.message.text) {
-            // Если бот является целью ответа, используем весь текст
             userMessage = ctx.message.text.trim();
         } else {
-            // В других случаях используем пустое сообщение
             userMessage = '';
         }
 
         const userName = getUserName(ctx);
         const messageDate = new Date(ctx.message.date * 1000).toLocaleString();
-
-        // Получение истории сообщений из сессии
         const history = ctx.session.history;
         const memories = ctx.session.memories || {};
-
-        // Построение массива contents
         const contents = buildContents(history, memories, userName, userMessage, messageDate);
 
         // Запуск симуляции печати
@@ -1449,28 +1685,31 @@ bot.chatType(['group', 'supergroup']).on('message', async (ctx) => {
 
         const userId = ctx.from.id.toString();
         const userMaxTokens = globalContext[userId]?.maxOutputTokens || 700;
-        const userTemperature = globalContext[userId]?.temperature || 0.7;
+        const userTemperature = globalContext[userId]?.temperature || 1.5;
 
-        // Генерация ответа от модели Gemini
-        const result = await model.generateContent(contents, {
-            generationConfig: {
-                maxOutputTokens: userMaxTokens,
-                temperature: userTemperature,
-            },
-        });
+        // Создаем модель с пользовательскими настройками
+        userModel = createModel(userMaxTokens, userTemperature);
 
-        // Остановка симуляции печати
+        // Генерация ответа с использованием резервной модели при необходимости
+        const result = await generateResponseWithBackup(userModel, contents, userMaxTokens, userTemperature);
+
+        // Останавливаем симуляцию печатания
         typingSimulation.stop();
 
-        // Односекундная задержка перед отправкой ответа пользователю
+        // Односекундная задержка перед отправкой ответа
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
         if (!result.response) {
             throw new Error('Не удалось сгенерировать ответ');
         }
+        
         let botReply = result.response.text();
 
-        // Санитизируем ответ перед отправкой
+        // Проверяем, использовалась ли резервная модель
+        if (result.usedBackupModel) {
+            botReply = '<i>резервная модель:</i>\n\n' + botReply;
+        }
+
         botReply = sanitizeHtml(botReply, {
             allowedTags: allowedTags,
             allowedAttributes: allowedAttributes,
@@ -1486,35 +1725,50 @@ bot.chatType(['group', 'supergroup']).on('message', async (ctx) => {
             },
         });
 
-        // Проверяем, что после санитизации бот не остался без ответа
         if (!botReply || botReply.trim() === '') {
             botReply = 'Извините, но я не смогла сформулировать ответ.';
         }
 
-        // Обновление истории сообщений
-        ctx.session.history.push({ role: userName, content: userMessage, date: messageDate });
+        // Обновляем историю сообщений
+        ctx.session.history.push({ 
+            role: userName, 
+            content: userMessage, 
+            date: messageDate 
+        });
         ctx.session.history.push({
             role: 'Гермиона',
             content: botReply,
             date: new Date().toLocaleString(),
         });
 
-        // Увеличение счетчика сообщений
-        ctx.session.messageCountSinceSummary =
-            (ctx.session.messageCountSinceSummary || 0) + 2;
+        // Обновляем счетчик сообщений и генерируем summary при необходимости
+        ctx.session.messageCountSinceSummary = (ctx.session.messageCountSinceSummary || 0) + 2;
         if (ctx.session.messageCountSinceSummary >= 30) {
             await generateSummary(ctx.session);
             ctx.session.messageCountSinceSummary = 0;
         }
 
-        // Отправка ответа в группу
-        await sendLongMessage(ctx, botReply, { reply_to_message_id: ctx.message.message_id });
+        // Отправляем ответ
+        await sendLongMessage(ctx, botReply, { 
+            reply_to_message_id: ctx.message.message_id 
+        });
+
     } catch (error) {
         console.error('Ошибка при обработке сообщения в группе:', error);
-        await ctx.reply(
-            'Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже.',
-            { reply_to_message_id: ctx.message.message_id }
-        );
+        let errorMessage = 'Произошла ошибка при обработке вашего сообщения. Пожалуйста, попробуйте позже.';
+        if (error.message.includes('PROHIBITED_CONTENT')) {
+            errorMessage = 'Извините, ваш запрос содержит запрещённый контент.';
+        } else if (error.message.includes('Service Unavailable') || error.message.includes('недоступна')) {
+            errorMessage = 'Извините, сервис временно недоступен. Пожалуйста, попробуйте позже.';
+        } else if (error.message.includes('Слишком много запросов')) {
+            errorMessage = 'Извините, поступает слишком много запросов. Пожалуйста, попробуйте позже.';
+        }
+        await ctx.reply(errorMessage, { reply_to_message_id: ctx.message.message_id });
+    } finally {
+        // Очистка модели после использования
+        if (userModel) {
+            cleanupModel(userModel);
+        }
     }
 });
 
@@ -1550,7 +1804,7 @@ async function initializeContext() {
             globalContext[userId].maxOutputTokens = 700;
         }
         if (!globalContext[userId].temperature) {
-            globalContext[userId].temperature = 0.7;
+            globalContext[userId].temperature = 1.5;
         }
     }
     
