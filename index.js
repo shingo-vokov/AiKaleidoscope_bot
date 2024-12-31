@@ -29,7 +29,7 @@ bot.api.setMyCommands([
 
 // ID ваших групп
 const ALLOWED_GROUPS = [-1002022226776, -1002047093027]; // Добавьте ID обеих разрешенных групп
-const CHECK_MEMBERSHIP = true; // проверка членства в группе
+const CHECK_MEMBERSHIP = false; // проверка членства в группе
 
 /**
  * Функция для проверки, является ли группа разрешенной
